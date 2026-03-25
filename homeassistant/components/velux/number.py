@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pyvlx import ExteriorHeating, Intensity
+from pyvlx import ExteriorHeating, Intensity, Node
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.const import PERCENTAGE
@@ -21,12 +21,21 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up number entities for the Velux platform."""
-    pyvlx = config_entry.runtime_data
-    async_add_entities(
-        VeluxExteriorHeatingNumber(node, config_entry.entry_id)
-        for node in pyvlx.nodes
-        if isinstance(node, ExteriorHeating)
+    runtime_data = config_entry.runtime_data
+
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        entities = [
+            VeluxExteriorHeatingNumber(node, config_entry.entry_id)
+            for node in nodes
+            if isinstance(node, ExteriorHeating)
+        ]
+        if entities:
+            async_add_entities(entities)
+
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
     )
+    _async_add_nodes(runtime_data.nodes)
 
 
 class VeluxExteriorHeatingNumber(VeluxEntity, NumberEntity):

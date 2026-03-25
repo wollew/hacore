@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pyvlx import PyVLX, PyVLXException
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
     CONF_HOST,
     CONF_MAC,
@@ -26,8 +26,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, LOGGER, PLATFORMS
-
-type VeluxConfigEntry = ConfigEntry[PyVLX]
+from .coordinator import VeluxConfigEntry, VeluxRuntimeData
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -54,7 +53,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         for entry in hass.config_entries.async_entries(DOMAIN):
             if entry.state is ConfigEntryState.LOADED:
                 try:
-                    await entry.runtime_data.reboot_gateway()
+                    await entry.runtime_data.pyvlx.reboot_gateway()
                 except (OSError, PyVLXException) as err:
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -105,7 +104,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: VeluxConfigEntry) -> boo
         ) from ex
 
     LOGGER.debug("Velux connection to %s successful", host)
-    entry.runtime_data = pyvlx
 
     connections = None
     if (mac := entry.data.get(CONF_MAC)) is not None:
@@ -127,6 +125,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: VeluxConfigEntry) -> boo
         connections=connections,
     )
 
+    entry.runtime_data = runtime_data = VeluxRuntimeData(hass, entry, pyvlx)
+    runtime_data.async_set_updated_data(
+        {node.node_id: node for node in runtime_data.nodes}
+    )
+    entry.async_on_unload(runtime_data.async_add_listener(lambda: None))
+
     async def on_hass_stop(_: Event) -> None:
         """Close connection when hass stops."""
         LOGGER.debug("Velux interface terminated")
@@ -147,5 +151,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: VeluxConfigEntry) -> bo
         # Disconnect from gateway only after platforms are successfully unloaded.
         # Disconnecting will reboot the gateway in the pyvlx library, which is needed to allow new
         # connections to be made later.
-        await entry.runtime_data.disconnect()
+        await entry.runtime_data.pyvlx.disconnect()
     return unload_ok

@@ -66,16 +66,20 @@ def mock_discovered_config_entry() -> MockConfigEntry:
 @pytest.fixture
 def mock_window() -> AsyncMock:
     """Create a mock Velux window with a rain sensor."""
-    window = AsyncMock(spec=Window, autospec=True)
+    window = MagicMock(spec=Window)
     window.name = "Test Window"
+    window.node_id = 1
     window.rain_sensor = True
     window.serial_number = "123456789"
-    window.get_limitation_min.return_value = MagicMock(position_percent=0)
-    window.device_updated_cbs = []
+    window.get_limitation_min = AsyncMock(return_value=MagicMock(position_percent=0))
     window.is_opening = False
     window.is_closing = False
     window.position = MagicMock(position_percent=30, closed=False)
     window.wink = AsyncMock()
+    window.open = AsyncMock()
+    window.close = AsyncMock()
+    window.stop = AsyncMock()
+    window.set_position = AsyncMock()
     window.pyvlx = MagicMock()
     return window
 
@@ -86,6 +90,7 @@ def mock_dual_roller_shutter() -> AsyncMock:
     """Create a mock Velux dual roller shutter."""
     cover = AsyncMock(spec=DualRollerShutter, autospec=True)
     cover.name = "Test Dual Roller Shutter"
+    cover.node_id = 2
     cover.serial_number = "987654321"
     cover.is_opening = False
     cover.is_closing = False
@@ -102,6 +107,7 @@ def mock_blind() -> AsyncMock:
     """Create a mock Velux blind (cover with tilt)."""
     blind = AsyncMock(spec=Blind, autospec=True)
     blind.name = "Test Blind"
+    blind.node_id = 3
     blind.serial_number = "4711"
     # Standard cover position (used by current_cover_position)
     blind.position = MagicMock(position_percent=40, closed=False)
@@ -123,6 +129,7 @@ def mock_light() -> AsyncMock:
     """Create a mock Velux light."""
     light = AsyncMock(spec=Light, autospec=True)
     light.name = "Test Light"
+    light.node_id = 4
     light.serial_number = "0815"
     light.intensity = MagicMock()
     light.pyvlx = MagicMock()
@@ -135,6 +142,7 @@ def mock_onoff_light() -> AsyncMock:
     """Create a mock Velux light."""
     light = AsyncMock(spec=OnOffLight, autospec=True)
     light.name = "Test On Off Light"
+    light.node_id = 5
     light.serial_number = "0816"
     light.intensity = MagicMock()
     light.pyvlx = MagicMock()
@@ -147,6 +155,7 @@ def mock_exterior_heating() -> AsyncMock:
     """Create a mock Velux exterior heating device."""
     exterior_heating = AsyncMock(spec=ExteriorHeating, autospec=True)
     exterior_heating.name = "Test Exterior Heating"
+    exterior_heating.node_id = 6
     exterior_heating.serial_number = "1984"
     exterior_heating.intensity = MagicMock(intensity_percent=33)
     exterior_heating.pyvlx = MagicMock()
@@ -159,6 +168,7 @@ def mock_onoff_switch() -> AsyncMock:
     """Create a mock Velux on/off switch."""
     switch = AsyncMock(spec=OnOffSwitch, autospec=True)
     switch.name = "Test On Off Switch"
+    switch.node_id = 7
     switch.serial_number = "0817"
     switch.is_on.return_value = False
     switch.is_off.return_value = True
@@ -172,6 +182,7 @@ def mock_cover_type(request: pytest.FixtureRequest) -> AsyncMock:
     """Create a mock Velux cover of specified type."""
     cover = AsyncMock(spec=request.param, autospec=True)
     cover.name = f"Test {request.param.__name__}"
+    cover.node_id = 99
     cover.serial_number = f"serial_{request.param.__name__}"
     cover.is_opening = False
     cover.is_closing = False
@@ -180,6 +191,27 @@ def mock_cover_type(request: pytest.FixtureRequest) -> AsyncMock:
     cover.position_lower_curtain = MagicMock(position_percent=30, closed=False)
     cover.pyvlx = MagicMock()
     return cover
+
+
+@pytest.fixture
+def mock_window_added() -> AsyncMock:
+    """Create an additional mock Velux window for dynamic-device tests."""
+    window = MagicMock(spec=Window)
+    window.name = "New Window"
+    window.node_id = 11
+    window.rain_sensor = True
+    window.serial_number = "987650001"
+    window.get_limitation_min = AsyncMock(return_value=MagicMock(position_percent=0))
+    window.is_opening = False
+    window.is_closing = False
+    window.position = MagicMock(position_percent=15, closed=False)
+    window.wink = AsyncMock()
+    window.open = AsyncMock()
+    window.close = AsyncMock()
+    window.stop = AsyncMock()
+    window.set_position = AsyncMock()
+    window.pyvlx = MagicMock()
+    return window
 
 
 @pytest.fixture

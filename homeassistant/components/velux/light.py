@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pyvlx import DimmableDevice, Intensity, Light, OnOffLight
+from pyvlx import DimmableDevice, Intensity, Light, Node, OnOffLight
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
 from homeassistant.core import HomeAssistant
@@ -22,14 +22,22 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up light(s) for Velux platform."""
-    pyvlx = config_entry.runtime_data
-    entities: list[VeluxOnOffLight] = []
-    for node in pyvlx.nodes:
-        if isinstance(node, Light):
-            entities.append(VeluxDimmableLight(node, config_entry.entry_id))
-        elif isinstance(node, OnOffLight):
-            entities.append(VeluxOnOffLight(node, config_entry.entry_id))
-    async_add_entities(entities)
+    runtime_data = config_entry.runtime_data
+
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        entities: list[VeluxOnOffLight] = []
+        for node in nodes:
+            if isinstance(node, Light):
+                entities.append(VeluxDimmableLight(node, config_entry.entry_id))
+            elif isinstance(node, OnOffLight):
+                entities.append(VeluxOnOffLight(node, config_entry.entry_id))
+        if entities:
+            async_add_entities(entities)
+
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
+    )
+    _async_add_nodes(runtime_data.nodes)
 
 
 class VeluxOnOffLight(VeluxEntity, LightEntity):

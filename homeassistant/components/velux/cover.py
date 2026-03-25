@@ -5,12 +5,13 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pyvlx.opening_device import (
+from pyvlx import (
     Awning,
     Blind,
     DualRollerShutter,
     GarageDoor,
     Gate,
+    Node,
     OpeningDevice,
     Position,
     RollerShutter,
@@ -39,33 +40,34 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up cover(s) for Velux platform."""
-    pyvlx = config_entry.runtime_data
+    runtime_data = config_entry.runtime_data
 
-    entities: list[VeluxCover] = []
-    for node in pyvlx.nodes:
-        if isinstance(node, Blind):
-            entities.append(VeluxBlind(node, config_entry.entry_id))
-        elif isinstance(node, DualRollerShutter):
-            # add three entities, one for each part and the "dual" control
-            entities.append(
-                VeluxDualRollerShutter(
-                    node, config_entry.entry_id, VeluxDualRollerPart.DUAL
-                )
-            )
-            entities.append(
-                VeluxDualRollerShutter(
-                    node, config_entry.entry_id, VeluxDualRollerPart.UPPER
-                )
-            )
-            entities.append(
-                VeluxDualRollerShutter(
-                    node, config_entry.entry_id, VeluxDualRollerPart.LOWER
-                )
-            )
-        elif isinstance(node, OpeningDevice):
-            entities.append(VeluxCover(node, config_entry.entry_id))
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        entities: list[VeluxCover] = []
+        for node in nodes:
+            entities.extend(_entities_for_node(node, config_entry.entry_id))
+        if entities:
+            async_add_entities(entities)
 
-    async_add_entities(entities)
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
+    )
+    _async_add_nodes(runtime_data.nodes)
+
+
+def _entities_for_node(node: Node, config_entry_id: str) -> list[VeluxCover]:
+    """Create cover entities for a node."""
+    if isinstance(node, Blind):
+        return [VeluxBlind(node, config_entry_id)]
+    if isinstance(node, DualRollerShutter):
+        return [
+            VeluxDualRollerShutter(node, config_entry_id, VeluxDualRollerPart.DUAL),
+            VeluxDualRollerShutter(node, config_entry_id, VeluxDualRollerPart.UPPER),
+            VeluxDualRollerShutter(node, config_entry_id, VeluxDualRollerPart.LOWER),
+        ]
+    if isinstance(node, OpeningDevice):
+        return [VeluxCover(node, config_entry_id)]
+    return []
 
 
 class VeluxCover(VeluxEntity, CoverEntity):

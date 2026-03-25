@@ -24,15 +24,25 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities for the Velux integration."""
+    runtime_data = config_entry.runtime_data
     entities: list[ButtonEntity] = [
-        VeluxGatewayRebootButton(config_entry.entry_id, config_entry.runtime_data)
+        VeluxGatewayRebootButton(config_entry.entry_id, runtime_data.pyvlx)
     ]
-    entities.extend(
-        VeluxIdentifyButton(node, config_entry.entry_id)
-        for node in config_entry.runtime_data.nodes
-        if isinstance(node, Node)
-    )
     async_add_entities(entities)
+
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        identify_entities = [
+            VeluxIdentifyButton(node, config_entry.entry_id)
+            for node in nodes
+            if isinstance(node, Node)
+        ]
+        if identify_entities:
+            async_add_entities(identify_entities)
+
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
+    )
+    _async_add_nodes(runtime_data.nodes)
 
 
 class VeluxIdentifyButton(VeluxEntity, ButtonEntity):

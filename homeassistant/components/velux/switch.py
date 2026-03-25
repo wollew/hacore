@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pyvlx import OnOffSwitch
+from pyvlx import Node, OnOffSwitch
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
@@ -22,12 +22,21 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up switch(es) for Velux platform."""
-    pyvlx = config_entry.runtime_data
-    async_add_entities(
-        VeluxOnOffSwitch(node, config_entry.entry_id)
-        for node in pyvlx.nodes
-        if isinstance(node, OnOffSwitch)
+    runtime_data = config_entry.runtime_data
+
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        entities = [
+            VeluxOnOffSwitch(node, config_entry.entry_id)
+            for node in nodes
+            if isinstance(node, OnOffSwitch)
+        ]
+        if entities:
+            async_add_entities(entities)
+
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
     )
+    _async_add_nodes(runtime_data.nodes)
 
 
 class VeluxOnOffSwitch(VeluxEntity, SwitchEntity):

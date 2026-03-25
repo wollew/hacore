@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from pyvlx import OpeningDevice, Position, PyVLXException, Window
+from pyvlx import Node, Position, PyVLXException, Window
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -27,13 +27,21 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up rain sensor(s) for Velux platform."""
-    pyvlx = config_entry.runtime_data
+    runtime_data = config_entry.runtime_data
 
-    async_add_entities(
-        VeluxRainSensor(node, config_entry.entry_id)
-        for node in pyvlx.nodes
-        if isinstance(node, Window) and node.rain_sensor
+    def _async_add_nodes(nodes: list[Node]) -> None:
+        entities = [
+            VeluxRainSensor(node, config_entry.entry_id)
+            for node in nodes
+            if isinstance(node, Window) and node.rain_sensor
+        ]
+        if entities:
+            async_add_entities(entities)
+
+    config_entry.async_on_unload(
+        runtime_data.register_new_node_callback(_async_add_nodes)
     )
+    _async_add_nodes(runtime_data.nodes)
 
 
 class VeluxRainSensor(VeluxEntity, BinarySensorEntity):
@@ -46,7 +54,7 @@ class VeluxRainSensor(VeluxEntity, BinarySensorEntity):
     _attr_translation_key = "rain_sensor"
     _unavailable_logged = False
 
-    def __init__(self, node: OpeningDevice, config_entry_id: str) -> None:
+    def __init__(self, node: Window, config_entry_id: str) -> None:
         """Initialize VeluxRainSensor."""
         super().__init__(node, config_entry_id)
         self._attr_unique_id = f"{self._attr_unique_id}_rain_sensor"

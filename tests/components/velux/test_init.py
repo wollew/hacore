@@ -8,19 +8,28 @@ They also verify that unloading the integration properly disconnects.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import patch
 
+from freezegun.api import FrozenDateTimeFactory
 import pytest
 from pyvlx.exception import PyVLXException
 
 from homeassistant.components.velux.const import DOMAIN
+from homeassistant.components.velux.coordinator import NODES_REFRESH_INTERVAL
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
 
-from tests.common import AsyncMock, ConfigEntry, MockConfigEntry
+from tests.common import (
+    AsyncMock,
+    ConfigEntry,
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 
 async def test_setup_retry_on_nodes_failure(
@@ -166,3 +175,101 @@ async def test_reboot_gateway_service_raises_validation_error(
             "reboot_gateway",
             blocking=True,
         )
+
+
+@pytest.mark.parametrize("mock_pyvlx", ["mock_window"], indirect=True)
+async def test_dynamic_devices_add_and_remove_nodes(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_pyvlx: AsyncMock,
+    mock_window: AsyncMock,
+    mock_window_added: AsyncMock,
+    device_registry: dr.DeviceRegistry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Test dynamic addition and removal of Velux node-backed devices."""
+    mock_config_entry.add_to_hass(hass)
+
+    with patch(
+        "homeassistant.components.velux.PLATFORMS",
+        [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.COVER],
+    ):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (
+        len(
+            dr.async_entries_for_config_entry(
+                device_registry, mock_config_entry.entry_id
+            )
+        )
+        == 2
+    )
+    assert hass.states.get("cover.test_window") is not None
+    assert hass.states.get("button.test_window_identify") is not None
+
+    mock_pyvlx.nodes.append(mock_window_added)
+
+    freezer.tick(NODES_REFRESH_INTERVAL + timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (
+        len(
+            dr.async_entries_for_config_entry(
+                device_registry, mock_config_entry.entry_id
+            )
+        )
+        == 3
+    )
+    assert hass.states.get("cover.new_window") is not None
+    assert hass.states.get("button.new_window_identify") is not None
+
+    mock_pyvlx.nodes.remove(mock_window)
+
+    freezer.tick(NODES_REFRESH_INTERVAL + timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (
+        len(
+            dr.async_entries_for_config_entry(
+                device_registry, mock_config_entry.entry_id
+            )
+        )
+        == 2
+    )
+    assert (
+        device_registry.async_get_device(
+            identifiers={(DOMAIN, mock_window.serial_number)}
+        )
+        is None
+    )
+    assert hass.states.get("cover.test_window") is None
+    assert hass.states.get("button.test_window_identify") is None
+
+
+@pytest.mark.parametrize("mock_pyvlx", ["mock_window"], indirect=True)
+async def test_dynamic_devices_add_dual_roller_shutter_entities(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_pyvlx: AsyncMock,
+    mock_dual_roller_shutter: AsyncMock,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Test dynamically adding a dual roller shutter creates all cover entities."""
+    mock_config_entry.add_to_hass(hass)
+
+    with patch("homeassistant.components.velux.PLATFORMS", [Platform.COVER]):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    mock_pyvlx.nodes.append(mock_dual_roller_shutter)
+
+    freezer.tick(NODES_REFRESH_INTERVAL + timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert hass.states.get("cover.test_dual_roller_shutter") is not None
+    assert hass.states.get("cover.test_dual_roller_shutter_upper_shutter") is not None
+    assert hass.states.get("cover.test_dual_roller_shutter_lower_shutter") is not None
